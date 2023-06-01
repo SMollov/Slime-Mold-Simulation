@@ -2,29 +2,30 @@ import sys
 import os
 import numpy as np
 import pygame
-import heapq
+from queue import PriorityQueue
 
-#TO DO - Irregular growth pulses, Veins, Texture, Custom Barriers
-
-GRID_WIDTH = 1280
+# Constants
+GRID_WIDTH = 720
 GRID_HEIGHT = 720
-BARRIER_PROB = 0.385
-UPDATE_FREQUENCY = 200
-NEIGHBOR_OFFSETS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-VISITED_COLOR = (230, 218, 7)
-DECAY_COLOR = (138, 143, 19)
-DECAY_COLOR2 = (22, 26, 10)
-buttons_color = (110, 24, 24)
-buttons_hover_color = (60, 0, 15)
-font = "arial"
+BARRIER_PROB = 0.381966  # Barrier "density"
+UPDATE_FREQUENCY = 400  # Frequency at which the algorithm steps are updated/rendered
+NEIGHBOR_OFFSETS = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # Offsets to get neighboring cells
+VISITED_COLOR = (230, 218, 7)  # Color for visited cells
+DECAY_COLOR = (133, 123, 28)  # Color for old cells
+DECAY_COLOR2 = (22, 26, 10)  # Another color for old cells
+BUTTONS_COLOR = (110, 24, 24)  # Color for buttons
+BUTTONS_HOVER_COLOR = (60, 0, 15)  # Color for buttons when the mouse is hovering
+FONT = "arial"  # Font used for button text
 
-def generate_new_map():
+# Map generation
+def generate_barrier_map():
     barrier_array = np.random.choice([0, 1], size=(GRID_HEIGHT, GRID_WIDTH), p=[1 - BARRIER_PROB, BARRIER_PROB])
     return barrier_array
 
+# UI rendering
 def clear_window(screen, barrier_map):
     screen.fill((0, 0, 0))
-    draw_map((screen), barrier_map)
+    draw_map(screen, barrier_map)
     pygame.display.update()
 
 def draw_map(screen, barrier_map):
@@ -32,7 +33,56 @@ def draw_map(screen, barrier_map):
     for x, y in barriers:
         pygame.draw.rect(screen, (45, 45, 45), (y, x, 1, 1))
 
+def draw_button(x, y, w, h, text, inactive, active, screen, action=None):
+    mouse = pygame.mouse.get_pos()
+    click = pygame.mouse.get_pressed()
 
+    if x + w > mouse[0] > x and y + h > mouse[1] > y:
+        pygame.draw.rect(screen, active, (x, y, w, h))
+        if click[0] == 1 and action is not None:
+            action()
+    else:
+        pygame.draw.rect(screen, inactive, (x, y, w, h))
+
+    button_text = pygame.font.SysFont(FONT, 24, bold=True).render(text, True, (255, 248, 219))
+    text_rect = button_text.get_rect(center=(x + w // 2, y + h // 2))
+    screen.blit(button_text, text_rect)
+
+# Algorithm
+def dijkstra(screen, barrier_map, start, end):
+    queue = PriorityQueue()
+    queue.put((0, start))
+    visited = np.zeros((GRID_HEIGHT, GRID_WIDTH), dtype=bool)
+    previous = np.full((GRID_HEIGHT, GRID_WIDTH), fill_value=float('inf'), dtype=float)
+    previous[start[1], start[0]] = 0
+    visited_cells = []
+    
+    while not queue.empty():
+        current_cost, current_cell = queue.get()
+        visited[current_cell[1], current_cell[0]] = True
+        visited_cells.append(current_cell)
+        if current_cell == end:
+            break
+
+        neighbors = get_neighbors(current_cell, barrier_map)
+        for neighbor in neighbors:
+            distance = previous[current_cell[1], current_cell[0]] + 1
+            if distance < previous[neighbor[1], neighbor[0]]:
+                previous[neighbor[1], neighbor[0]] = distance
+                queue.put((distance, neighbor))
+
+    return visited_cells
+
+def get_neighbors(cell, barrier_map):
+    x, y = cell
+    valid_neighbors = []
+    for dx, dy in NEIGHBOR_OFFSETS:
+        nx, ny = x + dx, y + dy
+        if 0 <= nx < GRID_WIDTH and 0 <= ny < GRID_HEIGHT and barrier_map[ny, nx] != 1:
+            valid_neighbors.append((nx, ny))
+    return valid_neighbors
+
+# User input for start and end
 def get_user_input(screen, barrier_map):
     start = None
     end = None
@@ -57,7 +107,7 @@ def get_user_input(screen, barrier_map):
         if start is not None:
             pygame.draw.circle(screen, (0, 255, 0), start, 5)
         if end is not None:
-            pygame.draw.circle(screen, (255, 0, 0), end, 7)
+            pygame.draw.circle(screen, (255, 255, 255), end, 7)
         pygame.display.update()
 
     radius = 7
@@ -69,88 +119,66 @@ def get_user_input(screen, barrier_map):
 
     return start, end
 
-def dijkstra(screen, barrier_map, start, end):
-    heap = []
-    heapq.heappush(heap, (0, start))
-    visited = np.zeros((GRID_HEIGHT, GRID_WIDTH), dtype=bool)
-    previous = np.full((GRID_HEIGHT, GRID_WIDTH), fill_value=float('inf'), dtype=float)
-    previous[start[1], start[0]] = 0
-    visited_nodes = []
+# Path finding process visualization
+def draw_algorithm_steps(screen, barrier_map, start, end):
+    visited_cells = dijkstra(screen, barrier_map, start, end)
+    trail_cells = []
+    iteration = 0
+    update_counter = 0
+    update_threshold = UPDATE_FREQUENCY
+    for cell in visited_cells:
+        iteration += 1
+        if len(trail_cells) > (iteration / 11)/3.15:
+            decay_cell = trail_cells.pop(0)
+            pygame.draw.rect(screen, VISITED_COLOR, (cell[0], cell[1], 2, 2))
+            pygame.draw.rect(screen, DECAY_COLOR2, (decay_cell[0], decay_cell[1], 2, 2))
+            pygame.draw.rect(screen, DECAY_COLOR, (decay_cell[0], decay_cell[1], 1, 1))
+        else:
+            rect_width = 2
+        trail_cells.append(cell)
 
-    while heap:
-        current_cost, current_node = heapq.heappop(heap)
-        visited[current_node[1], current_node[0]] = True
-        visited_nodes.append(current_node)
-        if current_node == end:
-            break
-        
-        neighbors = get_neighbors(current_node, barrier_map)
-        for neighbor in neighbors:
-            distance = previous[current_node[1], current_node[0]] + 1
-            if distance < previous[neighbor[1], neighbor[0]]:
-                previous[neighbor[1], neighbor[0]] = distance
-                heapq.heappush(heap, (distance, neighbor))
+        update_counter += 1
+        if update_counter >= update_threshold:
+            pygame.display.update()
+            update_counter = 0
 
-    return visited_nodes
+def run_button_action(screen, barrier_map):
+    clear_window(screen, barrier_map)
+    start, end = get_user_input(screen, barrier_map)
+    pygame.draw.circle(screen, (255, 255, 255), end, 7)
+    if start and end:
+        draw_algorithm_steps(screen, barrier_map, start, end)
+    barrier_map[:] = generate_barrier_map()
 
-def get_neighbors(node, grid):
-    x, y = node
-    neighbors = [(x + dx, y + dy) for dx, dy in NEIGHBOR_OFFSETS if 0 <= x + dx < GRID_WIDTH and 0 <= y + dy < GRID_HEIGHT and grid[y + dy, x + dx] != 1]
-    return neighbors
-
-def button(x, y, w, h, inactive, active, screen, action=None):
-    mouse = pygame.mouse.get_pos()
-    click = pygame.mouse.get_pressed()
-
-    if x + w > mouse[0] > x and y + h > mouse[1] > y:
-        pygame.draw.rect(screen, active, (x, y, w, h))
-        if click[0] == 1 and action is not None:
-            action()
-    else:
-        pygame.draw.rect(screen, inactive, (x, y, w, h))
-
+# Initialize the game and handle events
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((GRID_WIDTH, GRID_HEIGHT))  
+    screen = pygame.display.set_mode((GRID_WIDTH, GRID_HEIGHT))
+
+    buttons = [
+        {'rect': pygame.Rect(20, GRID_HEIGHT - 70, 100, 50), 'text': "Run", 'action': run_button_action}
+    ]
+
+    barrier_map = generate_barrier_map()
+    clear_window(screen, barrier_map)
+
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
-                if run_button.collidepoint(mouse_pos):
-                    barrier_map = generate_new_map()
-                    clear_window(screen, barrier_map)
-                    start, end = get_user_input(screen, barrier_map)
-                    visited_nodes = dijkstra(screen, barrier_map, start, end)    
-                    trail_nodes = []
-                    iteration = 0
-                    for node in visited_nodes:
-                        iteration += 1    
-                                           
-                        if len(trail_nodes) > iteration/12:
-                            decay_node = trail_nodes.pop(0)
-                            pygame.draw.rect(screen, VISITED_COLOR, (node[0], node[1], 2,2)) 
-                            pygame.draw.rect(screen, DECAY_COLOR2, (decay_node[0], decay_node[1], 2, 2))
-                            pygame.draw.rect(screen, DECAY_COLOR, (decay_node[0], decay_node[1], 1, 1))
+                for button_data in buttons:
+                    if button_data['rect'].collidepoint(mouse_pos):
+                        action = button_data['action']
+                        if action:
+                            action(screen, barrier_map)
 
-                        else:
-                            rect_width = 2
-                        trail_nodes.append(node)
-                        
-                        if iteration % UPDATE_FREQUENCY == 0:
-                            pygame.display.update()
-
-        
-        buttons_font = pygame.font.SysFont(font, 24, bold=True)
-        text_font = pygame.font.SysFont(font, 20)
-        run_button = pygame.Rect(20, GRID_HEIGHT-70, 100, 50)
-        run_button_text = buttons_font.render("Run", True, (255, 248, 219))
-        button(run_button.x, run_button.y, run_button.width, run_button.height, buttons_color, buttons_hover_color, screen, None)
-        screen.blit(run_button_text, run_button.move(25, 10))
-        start_text = text_font.render("Press Run and click to add start and end points.", True, (255, 248, 219))
-        screen.blit(start_text, (0,0))
+        for button_data in buttons:
+            draw_button(button_data['rect'].x, button_data['rect'].y, button_data['rect'].width,
+                        button_data['rect'].height,
+                        button_data['text'], BUTTONS_COLOR, BUTTONS_HOVER_COLOR, screen)
 
         pygame.display.update()
 
