@@ -1,7 +1,10 @@
 # Slime-Mold-Simulation
 Visualization of the Dijkstra's algorithm in a grid-based environment. Every step is displayed by highlighting visited cells, simulating a slime-like growth.
-The visualization tries to imitate the movement of Physarum polycephalum. This project is inspired by multiple science experiments showing the ability of slime molds to navigate the quickest route through a maze to get food. 
+The visualization tries to imitate the movement of Physarum polycephalum. This project is inspired by multiple science experiments showing the ability of slime molds to navigate the quickest route through a maze to get food. The program allows you to draw custom barriers and start/end points.
 
+[Watch Video](https://vimeo.com/833366917)
+
+<img src="https://github.com/SMollov/Slime-Mold-Simulation/blob/main/media/0.png?raw=true" width="45%"></img> <img src="https://github.com/SMollov/Slime-Mold-Simulation/blob/main/media/4.png?raw=true" width="45%"></img> <img src="https://github.com/SMollov/Slime-Mold-Simulation/blob/main/media/2.png?raw=true" width="45%"></img> <img src="https://github.com/SMollov/Slime-Mold-Simulation/blob/main/media/3.png?raw=true" width="45%"></img>
 ## Prerequisites
 
 - Python 3.x
@@ -19,10 +22,7 @@ git clone https://github.com/SMollov/Slime-Mold-Simulation.git
 Install the required dependencies:
 
 ```bash
-pip3 install pygame
-```
-```bash
-pip3 install numpy
+pip3 install pygame numpy
 ```
 
 Run the script:
